@@ -3,28 +3,65 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// More graceful error handling for development
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Variables d\'environnement Supabase manquantes. Veuillez configurer VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans votre fichier .env')
+  console.warn('⚠️ Variables d\'environnement Supabase manquantes. Veuillez configurer VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans votre fichier .env')
+  console.warn('📖 Consultez SUPABASE_SETUP.md pour les instructions de configuration')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Create a mock client for development when env vars are missing
+const createMockClient = () => ({
   auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    signInWithPassword: () => Promise.resolve({ data: null, error: { message: 'Supabase non configuré' } }),
+    signUp: () => Promise.resolve({ data: null, error: { message: 'Supabase non configuré' } }),
+    signOut: () => Promise.resolve({ error: null }),
+    resetPasswordForEmail: () => Promise.resolve({ data: null, error: null })
   },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
+  from: () => ({
+    select: () => ({ data: [], error: null }),
+    insert: () => ({ data: null, error: { message: 'Supabase non configuré' } }),
+    update: () => ({ data: null, error: { message: 'Supabase non configuré' } }),
+    delete: () => ({ data: null, error: { message: 'Supabase non configuré' } }),
+    eq: function() { return this },
+    single: () => ({ data: null, error: { message: 'Supabase non configuré' } }),
+    limit: function() { return this },
+    order: function() { return this },
+    range: function() { return this }
+  }),
+  functions: {
+    invoke: () => Promise.resolve({ data: null, error: { message: 'Supabase non configuré' } })
   },
-  global: {
-    headers: {
-      'X-Client-Info': 'dalil-dz-legal-platform'
-    }
-  }
+  rpc: () => Promise.resolve({ data: null, error: { message: 'Supabase non configuré' } }),
+  removeChannel: () => {},
+  channel: () => ({
+    on: function() { return this },
+    subscribe: () => {}
+  })
 })
+
+export const supabase = (!supabaseUrl || !supabaseAnonKey) 
+  ? createMockClient()
+  : createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'dalil-dz-legal-platform'
+        }
+      }
+    })
 
 // Types pour TypeScript générés automatiquement
 export interface Database {
@@ -415,6 +452,10 @@ export const isSupabaseConfigured = (): boolean => {
 
 // Test de connexion
 export const testSupabaseConnection = async (): Promise<boolean> => {
+  if (!isSupabaseConfigured()) {
+    return false
+  }
+  
   try {
     const { data, error } = await supabase.from('user_profiles').select('count').limit(1)
     return !error
